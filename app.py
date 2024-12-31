@@ -1,26 +1,27 @@
-
 import streamlit as st
-import pickle
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
-# Load models
-with open("lr_model.pkl", "rb") as f:
-    lr_model = pickle.load(f)
-with open("rf_model.pkl", "rb") as f:
-    rf_model = pickle.load(f)
+st.title("File Upload Example")
 
-st.set_page_config(page_title="Ultimate ML App", layout="wide")
-st.title("🚀 Ultimate ML Prediction App")
-st.write("Predict target values, compare models, and explore feature importance.")
+# File uploader
+uploaded_file = st.file_uploader("Upload your file", type=["csv", "txt", "xlsx"])
 
-# Single Prediction
-st.header("Single Prediction")
-model_choice = st.selectbox("Choose a model:", ["Linear Regression", "Random Forest"])
-input_value = st.number_input("Enter a value for prediction:", value=0.0, step=0.1)
+if uploaded_file is not None:
+    # Check file type and process accordingly
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+        st.write("Here's your CSV file:")
+        st.dataframe(df)
 
-if st.button("Predict"):
-    model = lr_model if model_choice == "Linear Regression" else rf_model
-    prediction = model.predict(np.array(input_value).reshape(-1, 1))
-    st.metric("Prediction", f"{prediction[0]:.2f}")
+    elif uploaded_file.name.endswith(".txt"):
+        content = uploaded_file.read().decode("utf-8")
+        st.write("Here's your TXT file:")
+        st.text(content)
+
+    elif uploaded_file.name.endswith(".xlsx"):
+        df = pd.read_excel(uploaded_file)
+        st.write("Here's your Excel file:")
+        st.dataframe(df)
+
+    else:
+        st.error("Unsupported file type!")
