@@ -1,22 +1,34 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import json
+import os
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
+import shap
+import plotly.express as px
 
-# Try importing seaborn and matplotlib for visualization, with error handling
-try:
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-except ImportError:
-    st.error("The required libraries for visualization (seaborn, matplotlib) are missing. Ensure they are in the `requirements.txt`.")
+# App Configuration
+st.set_page_config(page_title="One-Stop Predictive Analytics App", layout="wide")
 
-# Title
-st.title("Advanced File Analysis and Statistics App")
+# Title and Description
+st.title("One-Stop Predictive Analytics App")
+st.write("""
+This app enables you to:
+- Clean and transform your data.
+- Visualize trends and patterns interactively.
+- Perform statistical analysis and insights.
+- Build and deploy predictive models.
+- Export and share results easily.
+""")
 
-# File uploader widget
-uploaded_file = st.file_uploader("Upload your file", type=["csv", "xlsx", "json", "txt"])
+# File Uploader
+uploaded_file = st.file_uploader("Upload your dataset (CSV, Excel, JSON)", type=["csv", "xlsx", "json"])
 
 if uploaded_file is not None:
-    # Detect file type and load accordingly
+    # Load the uploaded file
     file_type = uploaded_file.name.split(".")[-1]
     try:
         if file_type == "csv":
@@ -25,77 +37,127 @@ if uploaded_file is not None:
             df = pd.read_excel(uploaded_file)
         elif file_type == "json":
             df = pd.DataFrame(json.load(uploaded_file))
-        elif file_type == "txt":
-            df = pd.read_csv(uploaded_file, delimiter="\t")
         else:
             st.error("Unsupported file type!")
             st.stop()
 
-        # Display file upload success
         st.success(f"File '{uploaded_file.name}' uploaded successfully!")
-        st.write("Here’s a preview of your file:")
+        st.write("### Dataset Preview")
         st.dataframe(df)
 
-        # Dropdown menu for analysis options
-        analysis_type = st.selectbox(
-            "Select Analysis Type",
-            ["Descriptive Statistics", "Correlation Matrix", "Data Visualization"]
-        )
+        # Data Wrangling
+        st.sidebar.header("Data Wrangling")
+        if st.sidebar.checkbox("Remove Duplicates"):
+            df = df.drop_duplicates()
+            st.sidebar.write("Duplicates removed.")
 
-        if analysis_type == "Descriptive Statistics":
-            st.header("Descriptive Statistics")
+        if st.sidebar.checkbox("Handle Missing Values"):
+            strategy = st.sidebar.radio("Strategy", ["Drop Rows", "Fill with Mean", "Fill with Median"])
+            if strategy == "Drop Rows":
+                df = df.dropna()
+            elif strategy == "Fill with Mean":
+                df = df.fillna(df.mean())
+            elif strategy == "Fill with Median":
+                df = df.fillna(df.median())
+            st.sidebar.write("Missing values handled.")
+
+        st.write("### Cleaned Data")
+        st.dataframe(df)
+
+        # Data Visualization
+        st.sidebar.header("Data Visualization")
+        chart_type = st.sidebar.selectbox("Select Chart Type", ["Histogram", "Scatter Plot", "Box Plot", "Line Chart"])
+        numeric_columns = list(df.select_dtypes(include=["float", "int"]).columns)
+
+        if chart_type == "Histogram":
+            col = st.sidebar.selectbox("Select Column for Histogram", numeric_columns)
+            fig = px.histogram(df, x=col, nbins=20)
+            st.plotly_chart(fig)
+
+        elif chart_type == "Scatter Plot":
+            x_col = st.sidebar.selectbox("Select X-Axis", numeric_columns)
+            y_col = st.sidebar.selectbox("Select Y-Axis", numeric_columns)
+            fig = px.scatter(df, x=x_col, y=y_col)
+            st.plotly_chart(fig)
+
+        elif chart_type == "Box Plot":
+            col = st.sidebar.selectbox("Select Column for Box Plot", numeric_columns)
+            fig = px.box(df, y=col)
+            st.plotly_chart(fig)
+
+        elif chart_type == "Line Chart":
+            x_col = st.sidebar.selectbox("Select X-Axis", numeric_columns)
+            y_col = st.sidebar.selectbox("Select Y-Axis", numeric_columns)
+            fig = px.line(df, x=x_col, y=y_col)
+            st.plotly_chart(fig)
+
+        # Statistical Analysis
+        st.sidebar.header("Statistical Analysis")
+        analysis_type = st.sidebar.selectbox("Select Analysis Type", ["Summary Statistics", "Correlation Analysis"])
+        if analysis_type == "Summary Statistics":
+            st.write("### Summary Statistics")
             st.write(df.describe())
 
-        elif analysis_type == "Correlation Matrix":
-            st.header("Correlation Matrix")
-            if not df.select_dtypes(include=["float", "int"]).empty:
-                correlation = df.corr()
-                st.dataframe(correlation)
+        elif analysis_type == "Correlation Analysis":
+            st.write("### Correlation Heatmap")
+            corr = df.corr()
+            fig = px.imshow(corr, text_auto=True, color_continuous_scale="Viridis")
+            st.plotly_chart(fig)
 
-                # Correlation heatmap
-                st.write("Correlation Heatmap:")
-                plt.figure(figsize=(10, 6))
-                sns.heatmap(correlation, annot=True, cmap="coolwarm")
-                st.pyplot(plt)
-            else:
-                st.error("No numeric columns available for correlation analysis!")
+        # Predictive Modeling
+        st.sidebar.header("Predictive Modeling")
+        model_type = st.sidebar.selectbox("Select Model", ["Linear Regression", "Random Forest"])
+        if len(numeric_columns) >= 2:
+            target_column = st.sidebar.selectbox("Select Target Column", numeric_columns)
+            feature_columns = st.sidebar.multiselect("Select Feature Columns", [col for col in numeric_columns if col != target_column])
 
-        elif analysis_type == "Data Visualization":
-            st.header("Data Visualization")
+            if st.sidebar.button("Run Model"):
+                X = df[feature_columns]
+                y = df[target_column]
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-            # Dropdown for chart types
-            chart_type = st.selectbox("Select Chart Type", ["Histogram", "Scatter Plot", "Box Plot"])
-            numeric_columns = list(df.select_dtypes(include=["float", "int"]).columns)
+                if model_type == "Linear Regression":
+                    model = LinearRegression()
+                elif model_type == "Random Forest":
+                    model = RandomForestRegressor()
 
-            if len(numeric_columns) == 0:
-                st.error("No numeric columns available for visualization!")
-            else:
-                if chart_type == "Histogram":
-                    column = st.selectbox("Select Column for Histogram", numeric_columns)
-                    plt.figure(figsize=(8, 5))
-                    plt.hist(df[column], bins=20, color="skyblue", edgecolor="black")
-                    plt.title(f"Histogram of {column}")
-                    st.pyplot(plt)
+                model.fit(X_train, y_train)
+                predictions = model.predict(X_test)
 
-                elif chart_type == "Scatter Plot":
-                    x_axis = st.selectbox("Select X-Axis", numeric_columns, key="scatter_x")
-                    y_axis = st.selectbox("Select Y-Axis", numeric_columns, key="scatter_y")
-                    plt.figure(figsize=(8, 5))
-                    plt.scatter(df[x_axis], df[y_axis], color="purple")
-                    plt.title(f"Scatter Plot: {x_axis} vs {y_axis}")
-                    plt.xlabel(x_axis)
-                    plt.ylabel(y_axis)
-                    st.pyplot(plt)
+                st.write(f"### {model_type} Results")
+                st.write("Mean Squared Error:", mean_squared_error(y_test, predictions))
+                st.write("R2 Score:", r2_score(y_test, predictions))
 
-                elif chart_type == "Box Plot":
-                    column = st.selectbox("Select Column for Box Plot", numeric_columns)
-                    plt.figure(figsize=(8, 5))
-                    sns.boxplot(y=df[column], color="orange")
-                    plt.title(f"Box Plot of {column}")
-                    st.pyplot(plt)
+                if model_type == "Random Forest":
+                    st.write("### Feature Importances")
+                    feature_importances = pd.DataFrame({
+                        "Feature": feature_columns,
+                        "Importance": model.feature_importances_
+                    }).sort_values(by="Importance", ascending=False)
+                    st.bar_chart(feature_importances.set_index("Feature"))
+
+                # Explainability (SHAP values)
+                explainer = shap.Explainer(model, X_test)
+                shap_values = explainer(X_test)
+                st.write("### Feature Contributions (SHAP Values)")
+                shap.summary_plot(shap_values, X_test, plot_type="bar")
+                st.pyplot()
+
+        else:
+            st.sidebar.warning("At least 2 numeric columns are required for modeling.")
+
+        # Export Data
+        st.sidebar.header("Export Data")
+        if st.sidebar.button("Download Cleaned Data"):
+            st.sidebar.download_button(
+                label="Download CSV",
+                data=df.to_csv(index=False),
+                file_name="cleaned_data.csv",
+                mime="text/csv"
+            )
 
     except Exception as e:
-        st.error(f"An error occurred while processing the file: {e}")
+        st.error(f"Error processing file: {e}")
 
 else:
-    st.info("Please upload a file to get started.")
+    st.info("Upload a dataset to get started.")
