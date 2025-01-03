@@ -6,3 +6,4 @@ scikit-learn
 shap 
 openpyxl
 seaborn
+plotly
